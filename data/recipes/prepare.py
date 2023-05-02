@@ -5,6 +5,22 @@ import numpy as np
 import pandas as pd
 
 
+import spacy
+from spacy.lang.en.stop_words import STOP_WORDS
+from spacy import Lemmatizer, Stemmer
+
+
+# Define a function to perform stemming and stop word removal
+def preprocess(text):
+    doc = nlp(text)
+    # Remove stop words
+    tokens = [token for token in doc if not token.is_stop]
+    # Perform stemming
+    stemmer = Stemmer(nlp.vocab)
+    stemmed_tokens = [stemmer(token.text).lower() for token in tokens]
+    return stemmed_tokens
+
+
 def row2recipe(title, ing, steps):
     recipe = f"""Title : {title}
 Ingredients: {ing}
@@ -22,13 +38,33 @@ if not os.path.exists(input_file_path):
     df = pd.read_csv(data_url)
     df["steps"] = df["steps"].fillna(" ")
 
+    # Load the English language model in Spacy
+
+    nlp = spacy.load("en_core_web_sm")
+    doc = nlp.pipe(list(df["steps"]))
+    cleaned_steps = []
+
+    i = 0
+    for d in doc:
+        tokens = [
+            token.lemma_
+            for token in d
+            if not token.is_stop and not token.is_digit and not token.is_bracket
+        ]
+        cleaned_steps.append(" ".join(tokens))
+        i += 1
+        if i % 1000 == 0:
+            print(f"CLEANING STEPS -{i}/{len(df)}")
+
+    df["cleaned_steps"] = cleaned_steps
+
     print("DOWNLOADED CSV")
     print("# ---------------------------------")
 
     with open("input.txt", "w") as f:
         for index, row in df.iterrows():
             recipe = row2recipe(
-                row["title"], row["ingredient"], row["steps"].replace("\n", "")
+                row["title"], row["ingredient"], row["cleaned_steps"].replace("\n", "")
             )
             f.write(recipe)
     print("INPUT.TXT CREATED")
@@ -42,11 +78,15 @@ with open(input_file_path, "r") as f:
 n = len(data.split("----------------\n"))
 recipes = data.split("----------------\n")
 number_of_tokens = len(data)
-train_data = "----------------\n".join(recipes[: int(n * 0.9)])
-val_data = "----------------\n".join(recipes[int(n * 0.9) :])
+train_data = "<|endoftext|>".join(recipes[: int(n * 0.9)])
+val_data = "<|endoftext|>".join(recipes[int(n * 0.9) :])
 
 # encode with tiktoken gpt2 bpe
 enc = tiktoken.get_encoding("gpt2")
+print(f"END OF TEXT TOKEN NUMBER : {tiktoken.encoding_for_model('gpt2').eot_token}")
+print(
+    f"END OF TEXT TOKEN : {enc.decode([tiktoken.encoding_for_model('gpt2').eot_token])}"
+)
 train_ids = enc.encode_ordinary(train_data)
 val_ids = enc.encode_ordinary(val_data)
 
