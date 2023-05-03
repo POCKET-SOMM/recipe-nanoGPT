@@ -452,4 +452,9 @@ class GPT(nn.Module):
             # append sampled index to the running sequence and continue
             idx = torch.cat((idx, idx_next), dim=1)
 
+            # stop generating after <|endoftext|>
+            endoftext = [27, 91, 437, 1659, 5239, 91, 29]
+            if idx[0][-7:].tolist() == endoftext:
+                break
+
         return idx
