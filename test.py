@@ -23,9 +23,9 @@ top_k = (
     100  # retain only the top_k most likely tokens, clamp others to have 0 probability
 )
 seed = 1337
-device = "cuda"  # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1', etc.
+device = "mps"  # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1', etc.
 dtype = "bfloat16"  # 'float32' or 'bfloat16' or 'float16'
-compile = False  # use PyTorch 2.0 to compile the model to be faster
+compile = True  # use PyTorch 2.0 to compile the model to be faster
 exec(open("configurator.py").read())  # overrides from command line or config file
 # -----------------------------------------------------------------------------
 
@@ -46,21 +46,17 @@ ctx = (
 )
 
 # model
-if init_from == "resume":
-    # init from a model saved in a specific directory
-    ckpt_path = os.path.join(out_dir, "ckpt.pt")
-    checkpoint = torch.load(ckpt_path, map_location=device)
-    gptconf = GPTConfig(**checkpoint["model_args"])
-    model = GPT(gptconf)
-    state_dict = checkpoint["model"]
-    unwanted_prefix = "_orig_mod."
-    for k, v in list(state_dict.items()):
-        if k.startswith(unwanted_prefix):
-            state_dict[k[len(unwanted_prefix) :]] = state_dict.pop(k)
-    model.load_state_dict(state_dict)
-elif init_from.startswith("gpt2"):
-    # init from a given GPT-2 model
-    model = GPT.from_pretrained(init_from, dict(dropout=0.0))
+# init from a model saved in a specific directory
+ckpt_path = os.path.join(out_dir, "ckpt.pt")
+checkpoint = torch.load(ckpt_path, map_location=device)
+gptconf = GPTConfig(**checkpoint["model_args"])
+model = GPT(gptconf)
+state_dict = checkpoint["model"]
+unwanted_prefix = "_orig_mod."
+for k, v in list(state_dict.items()):
+    if k.startswith(unwanted_prefix):
+        state_dict[k[len(unwanted_prefix) :]] = state_dict.pop(k)
+model.load_state_dict(state_dict)
 
 model.eval()
 model.to(device)
@@ -91,19 +87,41 @@ else:
     encode = lambda s: enc.encode(s, allowed_special={"<|endoftext|>"})
     decode = lambda l: enc.decode(l)
 
-# # encode the beginning of the prompt
-# if start.startswith("FILE:"):
-#     with open(start[5:], "r", encoding="utf-8") as f:
-#         start = f.read()
-start_ids = encode(start)
-x = torch.tensor(start_ids, dtype=torch.long, device=device)[None, ...]
 
-# run generation
+with open("./data/recipes/test_input.txt", "r", encoding="utf-8") as f:
+    start = f.read()
+
+recipes = start.split("----------------")
 with torch.no_grad():
     with ctx:
-        for k in range(num_samples):
+        for k in recipes[:-1]:
+            title = k.split("Ingredients:")[0].strip()
+            ings = k.split("Ingredients:")[1].strip()
+            start_ids = encode(f"{title}\nIngredients:")
+            x = torch.tensor(start_ids, dtype=torch.long, device=device)[None, ...]
             y = model.generate(x, max_new_tokens, temperature=temperature, top_k=top_k)
             decoded = decode(y[0].tolist())  # .split("<|endoftext|>")[0].strip()
 
-            print(decoded)
-            print("---------------")
+            pred_ings = (
+                decoded.split("Ingredients:")[1].strip().replace("<|endoftext|>", "")
+            )
+
+            ings_list = [i.strip().replace(",", "") for i in ings.split(",")]
+            pred_ings_list = [i.strip().replace(",", "") for i in pred_ings.split(",")]
+
+            ok_ings = set(ings_list).intersection(set(pred_ings_list))
+            missing_ings = set(ings_list) - ok_ings
+            extra_ings = set(pred_ings_list) - set(ings_list)
+
+            ok_pct = round(len(ok_ings) / len(ings_list) * 100, 2)
+            missing_pct = round(len(missing_ings) / len(ings_list) * 100, 2)
+
+            print(
+                f"""
+                {title}
+                ok% - [{ok_pct}], bad% - [{missing_pct}], extra% - [{len(extra_ings)}]  
+                    \tOK - [{ok_ings}],
+                    \tMISSING - [{missing_ings}],
+                    \tEXTRA - [{extra_ings}]
+                """
+            )

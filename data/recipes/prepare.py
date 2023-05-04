@@ -86,6 +86,17 @@ if not os.path.exists(input_file_path):
                 )
                 f.write(recipe)
 
+    with open("test_input.txt", "w") as f:
+        for index, row in df.sample(20).iterrows():
+            recipe = row2recipeNoSteps(
+                row["title"].lower(),
+                row["ingredient"].replace("diced", ""),
+                row["steps"].replace("\n", ""),
+            )
+            f.write(recipe)
+
+            ings = row["ingredient"].replace("diced", "").split(", ")
+
     print("INPUT.TXT CREATED")
     print("# ---------------------------------")
 

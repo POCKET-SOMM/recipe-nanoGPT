@@ -27,8 +27,8 @@ n_embd = 128
 # --eval_iters=20 --log_interval=1 --block_size=64 --batch_size=12 --n_layer=4 --n_head=4 --n_embd=128 --max_iters=2000 --lr_decay_iters=2000 --dropout=0.0
 # python train.py config/train_recipes_char.py --block_size=32 --batch_size=128 --n_layer=16 --n_head=16 --n_embd=256 --max_iters=4000 --lr_decay_iters=4000 --dropout=0.01
 # learning_rate = 1e-3  # with baby networks can afford to go a bit higher
-max_iters = 4000
-lr_decay_iters = 4000  # make equal to max_iters usually
+max_iters = 100000
+lr_decay_iters = 100000  # make equal to max_iters usually
 # min_lr = 1e-4  # learning_rate / 10 usually
 # beta2 = 0.99  # make a bit bigger because number of tokens per iter is small
 
